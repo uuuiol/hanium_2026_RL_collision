@@ -1,10 +1,32 @@
-# 멀티에이전트 PPO + COLREG 자율운항 시뮬레이터
+# 멀티에이전트 강화학습 + COLREG 자율운항 시뮬레이터
 
 ## 이 폴더가 뭔가요
 
-강화학습(PPO)으로 **배 3척이 서로를 피하면서 각자의 목적지까지 항해**하는 걸 학습시키는 코드입니다.
+강화학습(PPO/DDPG/TD3/SAC)과 고전적 반응형 기법(APF/VO)으로 **배 3척이 서로를 피하면서
+각자의 목적지까지 항해**하는 걸 비교 실험하는 코드입니다.
 국제해상충돌예방규칙(COLREG)까지 반영되어 있어서, 배들이 규칙에 맞게 우현으로 피하는 등의
 행동도 학습합니다.
+
+---
+
+## 0. 폴더 구조
+
+알고리즘별로 폴더가 나뉘어 있고, 여러 알고리즘이 공유하는 환경/모델 코드는 `common/`에 있습니다.
+
+| 폴더 | 내용 |
+|---|---|
+| `common/` | `multi_boat_env.py`(멀티 환경), `boat_env.py`(단일 환경), `ddpg_model.py`(Actor/Critic, DDPG/TD3/SAC 공유), `ddpg_continuous_train_logging.py`(ReplayBuffer + DDPGAgent, TD3/SAC도 이 버퍼를 가져다 씀), `apf_agent.py`, `vo_agent.py` |
+| `ppo/` | PPO 관련 전체 (모델, 학습, 구경 스크립트) |
+| `ddpg/` | DDPG 학습/구경 스크립트 (Actor/Critic 자체는 `common/`) |
+| `td3/` | TD3 (twin critic + delayed update + target smoothing) |
+| `sac/` | SAC (Gaussian Actor, 자동 엔트로피 온도조정) |
+| `classical/` | APF/VO 고전기법 평가 스크립트 (학습 없음) |
+| `eval/` | 그리디 평가, 시나리오 일반화 평가, top10 등 알고리즘 간 비교용 스크립트 |
+| `results/` | 모든 실험 결과(CSV/그래프/가중치), 알고리즘·시나리오별 하위 폴더로 정리됨 |
+
+각 폴더 안의 파일들은 맨 위에서 프로젝트 루트를 `sys.path`에 추가하는 부트스트랩 코드를 통해
+`common.xxx`, `ppo.xxx` 같은 패키지 경로로 서로를 import합니다. 실행할 때는 **항상 프로젝트
+루트 디렉토리에서** `python <폴더>/<스크립트>.py` 형태로 실행하세요 (예: `python ppo/multi_ppo_train_logging.py`).
 
 ---
 
@@ -18,36 +40,39 @@ pip install tensorflow numpy matplotlib
 
 ---
 
-## 2. 파일 목록 및 역할
+## 2. 파일 목록 및 역할 (PPO 기준 예시 — DDPG/TD3/SAC도 각자 폴더 안에 동일한 구조)
 
 ### 핵심 파일 (이 4개가 메인)
 
 | 파일 | 역할 | 직접 실행? |
 |---|---|---|
-| `ppo_model.py` | PPO 신경망(두뇌) 구조 정의 | ❌ |
-| `multi_boat_env.py` | 배 3척이 사는 세상 (장애물, COLREG, 안전거리 판정) | ❌ |
-| `multi_ppo_train_logging.py` | **학습 실행** (위 두 개를 조합해서 실제로 훈련) | ✅ 이걸 실행 |
-| `watch_multi_trained_agents.py` | **결과 구경** (학습된 배들이 움직이는 걸 실시간으로 봄) | ✅
+| `ppo/ppo_model.py` | PPO 신경망(두뇌) 구조 정의 | ❌ |
+| `common/multi_boat_env.py` | 배 3척이 사는 세상 (장애물, COLREG, DCPA/TCPA 기반 충돌위험도 판정) | ❌ |
+| `ppo/multi_ppo_train_logging.py` | **학습 실행** (위 두 개를 조합해서 실제로 훈련) | ✅ 이걸 실행 |
+| `ppo/watch_multi_trained_agents.py` | **결과 구경** (학습된 배들이 움직이는 걸 실시간으로 봄) | ✅
  학습 끝난 뒤 실행 |
 
 ### 보조 파일
 
 | 파일 | 역할 |
 |---|---|
-| `ppo_continuous_train_logging.py` | PPOAgent 클래스 정의 (multi_ppo가 이걸 가져다 씀) |
-| `boat_env.py` | 배 1척용 환경 (ppo_continuous가 의존) |
-| `watch_trained_agent.py` | 배 1척용 구경 스크립트 (멀티용과 혼동 주의!) |
-| `top10_episodes.py` | 학습 결과 CSV에서 점수 상위 10개 뽑아 보는 도구 |
+| `ppo/ppo_continuous_train_logging.py` | PPOAgent 클래스 정의 (multi_ppo가 이걸 가져다 씀) |
+| `common/boat_env.py` | 배 1척용 환경 (ppo_continuous가 의존) |
+| `ppo/watch_trained_agent.py` | 배 1척용 구경 스크립트 (멀티용과 혼동 주의!) |
+| `eval/top10_episodes.py` | 학습 결과 CSV에서 점수 상위 10개 뽑아 보는 도구 |
+
+DDPG/TD3/SAC는 각각 `ddpg/`, `td3/`, `sac/` 폴더 안에 같은 패턴(`multi_<algo>_train_logging.py`
+학습, `watch_multi_<algo>_trained_agents.py` 구경)으로 들어있습니다.
 
 ---
 
 ## 3. 실행 순서
 
-### STEP 1: 학습시키기
+### STEP 1: 학습시키기 (프로젝트 루트에서 실행)
 ```
-python multi_ppo_train_logging.py
+python ppo/multi_ppo_train_logging.py
 ```
-- 400 에피소드 학습 (로컬 PC 기준 20~40분 소요)
+- 600 에피소드 학습 (로컬 PC 기준 20~40분 소요)
 - 진행상황이 10 에피소드마다 콘솔에 출력됨
 - ★ 표시와 함께 "신기록!" 이 뜨면, 그 시점의 가중치가 자동 저장되는 것
 - **끝나면 생기는 파일들:**
@@ -57,7 +82,7 @@ python multi_ppo_train_logging.py
   - `multi_ppo_model_weights_best.weights.h5` — **최고 성능 시점 가중치 (이걸 쓰세요!)**
 
 ### STEP 2: 결과 구경하기
-`watch_multi_trained_agents.py`를 열어서 아래 한 줄을 확인:
+`ppo/watch_multi_trained_agents.py`를 열어서 아래 한 줄을 확인:
 ```python
 WEIGHTS_PATH = "multi_ppo_model_weights.weights.h5"
 ```
@@ -65,18 +90,20 @@ WEIGHTS_PATH = "multi_ppo_model_weights.weights.h5"
 ```python
 WEIGHTS_PATH = "multi_ppo_model_weights_best.weights.h5"
 ```
-그 다음 실행:
+(또는 `results/` 아래 실제 실험 폴더의 `..._best.weights.h5` 경로로)
+
+그 다음 실행 (프로젝트 루트에서):
 ```
-python watch_multi_trained_agents.py
+python ppo/watch_multi_trained_agents.py
 ```
 - 30판을 빠르게 스캔한 뒤, **목표 도달한 배가 가장 많은 판을 골라서** 상위 5개만 실시간으로 보여줌
 - 각 판 재생 전에 배별 결과(✅ 성공 / 💥 충돌 / ⏱ 시간초과)가 콘솔에 표시됨
 
 ### STEP 3: (선택) 점수 상위 10개 확인
 ```
-python top10_episodes.py
+python eval/top10_episodes.py
 ```
-- `multi_ppo_results.csv`에서 점수 높은 에피소드 10개를 표로 보여줌
+- 결과 CSV에서 점수 높은 에피소드 10개를 표로 보여줌
 
 ---
 
